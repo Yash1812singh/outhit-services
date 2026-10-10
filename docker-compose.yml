@@ -1,0 +1,64 @@
+# docker compose up --build   ->   gateway on http://localhost:8001
+# Only the gateway is published; the other services talk on the internal network.
+x-common: &common
+  build: &build { context: . }
+  env_file: .env
+  restart: unless-stopped
+  environment: &urls
+    GATEWAY_MARKET_DATA_URL: http://market-data:8201
+    GATEWAY_INTELLIGENCE_URL: http://intelligence:8202
+    GATEWAY_RESEARCH_URL: http://research:8203
+    GATEWAY_ADVISOR_URL: http://advisor:8204
+    GATEWAY_PAPER_URL: http://paper:8205
+    GATEWAY_BROKER_URL: http://broker:8206
+    BROKER_INTELLIGENCE_URL: http://intelligence:8202
+    PAPER_RESEARCH_URL: http://research:8203
+    PAPER_INTELLIGENCE_URL: http://intelligence:8202
+    INTELLIGENCE_MARKET_DATA_URL: http://market-data:8201
+    RESEARCH_MARKET_DATA_URL: http://market-data:8201
+    RESEARCH_INTELLIGENCE_URL: http://intelligence:8202
+    ADVISOR_MARKET_DATA_URL: http://market-data:8201
+    ADVISOR_INTELLIGENCE_URL: http://intelligence:8202
+    ADVISOR_RESEARCH_URL: http://research:8203
+
+services:
+  market-data:
+    <<: *common
+    build: { <<: *build, args: { SERVICE: market_data, PORT: 8201 } }
+    volumes: [market-data:/app/market_data/data]
+  intelligence:
+    <<: *common
+    build: { <<: *build, args: { SERVICE: intelligence, PORT: 8202 } }
+    volumes:
+      - intelligence:/app/intelligence/data
+      - ./intelligence/data/sentiment_model.joblib:/app/intelligence/data/sentiment_model.joblib:ro
+      - ./intelligence/data/sentiment_metrics.json:/app/intelligence/data/sentiment_metrics.json:ro
+    depends_on: [market-data]
+  research:
+    <<: *common
+    build: { <<: *build, args: { SERVICE: research, PORT: 8203 } }
+    volumes: [research:/app/research/data]
+    depends_on: [market-data, intelligence]
+  advisor:
+    <<: *common
+    build: { <<: *build, args: { SERVICE: advisor, PORT: 8204 } }
+    volumes: [advisor:/app/advisor/data]
+    depends_on: [market-data, intelligence, research]
+  paper:
+    <<: *common
+    build: { <<: *build, args: { SERVICE: paper, PORT: 8205 } }
+    volumes: [paper:/app/paper/data]
+    depends_on: [research, intelligence]
+  broker:
+    <<: *common
+    build: { <<: *build, args: { SERVICE: broker, PORT: 8206 } }
+    volumes: [broker:/app/broker/data]
+    depends_on: [intelligence]
+  gateway:
+    <<: *common
+    build: { <<: *build, args: { SERVICE: gateway, PORT: 8001 } }
+    volumes: [gateway:/app/gateway/data]
+    ports: ["8001:8001"]
+    depends_on: [market-data, intelligence, research, advisor, paper, broker]
+
+volumes: { market-data: {}, intelligence: {}, research: {}, advisor: {}, paper: {}, broker: {}, gateway: {} }

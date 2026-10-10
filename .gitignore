@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# Databases hold user data (password hashes, encrypted broker tokens): never commit them.
+*.db
+*.db-*
+*.sqlite*
+/data/
+research/data/cache/
+logs/
+broker/data/nse_instruments.json
+*/data/cache/
+research/data/cusip_tickers.json
