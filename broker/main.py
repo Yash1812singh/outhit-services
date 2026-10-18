@@ -83,9 +83,14 @@ def _client(c: Connection | None) -> Upstox:
         _fail(exc)
 
 
+def _require_live_allowed() -> None:
+    if not settings.allow_live:
+        raise HTTPException(403, "Real-money trading is turned off on this server. Use test mode (Upstox sandbox).")
+
+
 def _status(c: Connection | None) -> dict:
     if c is None:
-        return {"connected": False, "mode": None, "encryption_ready": bool(settings.encryption_key),
+        return {"connected": False, "mode": None, "encryption_ready": bool(settings.encryption_key), "live_allowed": settings.allow_live,
                 "redirect_uri": settings.redirect_uri, "limits": {"max_order_value": settings.default_max_order_value,
                                                                  "max_daily_value": settings.default_max_daily_value}}
     try:
@@ -94,6 +99,7 @@ def _status(c: Connection | None) -> dict:
         key = "unreadable"
     return {
         "connected": _connected(c), "mode": c.mode, "broker": c.broker, "encryption_ready": bool(settings.encryption_key),
+        "live_allowed": settings.allow_live,
         "token_expires_at": aware(c.token_expires_at), "api_key": key, "profile": c.profile or {},
         "live_trading_enabled": c.live_trading_enabled and c.mode == "live", "paused": c.paused,
         "awaiting_login": c.mode == "live" and not _connected(c) and bool(c.oauth_state),
@@ -147,6 +153,7 @@ class LiveStart(BaseModel):
 @app.post("/api/broker/connect/live/start")
 def connect_live_start(body: LiveStart, user: int = Depends(require_user), db: Session = Depends(get_db)) -> dict:
     """Save your Upstox app's key and secret, and get the Upstox login URL."""
+    _require_live_allowed()
     c = _conn(db, user) or _new_conn(user)
     try:
         c.api_key_enc, c.api_secret_enc = vault.seal(body.api_key.strip()), vault.seal(body.api_secret.strip())
@@ -163,6 +170,7 @@ def connect_live_start(body: LiveStart, user: int = Depends(require_user), db: S
 @app.post("/api/broker/connect/live/login")
 def connect_live_login(user: int = Depends(require_user), db: Session = Depends(get_db)) -> dict:
     """Log in again (each morning) using the saved key and secret."""
+    _require_live_allowed()
     c = _conn(db, user)
     if c is None or c.mode != "live" or not c.api_key_enc:
         raise HTTPException(409, "Save your Upstox API key and secret first.")
@@ -181,6 +189,7 @@ class LiveCallback(BaseModel):
 
 @app.post("/api/broker/connect/live/callback")
 async def connect_live_callback(body: LiveCallback, user: int = Depends(require_user), db: Session = Depends(get_db)) -> dict:
+    _require_live_allowed()
     c = _conn(db, user)
     if c is None or not c.oauth_state or not secrets.compare_digest(c.oauth_state, body.state):
         raise HTTPException(403, "This login link doesn't match your session. Start the Upstox connection again.")
@@ -209,6 +218,7 @@ class LiveSwitch(BaseModel):
 def live_trading(body: LiveSwitch, user: int = Depends(require_user), db: Session = Depends(get_db)) -> dict:
     c = _conn(db, user)
     if body.enable:
+        _require_live_allowed()
         if c is None or c.mode != "live" or not _connected(c):
             raise HTTPException(409, "Connect and log in to your live Upstox account first.")
         if body.acknowledge.strip().upper() != LIVE_ACK:
@@ -301,6 +311,8 @@ def _check_can_trade(c: Connection | None) -> None:
         raise HTTPException(409, "Connect your Upstox account first (live logins expire every morning at 3:30 AM IST).")
     if c.paused:
         raise HTTPException(423, "Trading is paused. Resume it to send orders.")
+    if c.mode == "live":
+        _require_live_allowed()   # also stops a live connection made before the switch was turned off
     if c.mode == "live" and not c.live_trading_enabled:
         raise HTTPException(409, "Live trading is switched off. Turn it on above to place real orders.")
 

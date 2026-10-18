@@ -97,3 +97,12 @@ def test_next_day_validation_reports_from_open_returns():
     v = predictor.evaluate(predictor.walk_forward(table, closes.index, cols, 1).oos)
     assert v["avg_return_from_open"] is not None and v["top_minus_bottom_return_from_open"] is not None
     assert all("avg_return_from_open" in d for d in v["deciles"])
+
+
+def test_training_can_be_turned_off_on_small_servers(monkeypatch):
+    from market_data.services import predictor
+    monkeypatch.setattr(predictor, "TRAINING_ENABLED", False)
+    monkeypatch.setattr(predictor, "_jobs", {})
+    out = predictor.get("in", 21)
+    assert out["status"] == "error" and "memory" in out["message"]
+    assert predictor._jobs == {}   # nothing was started

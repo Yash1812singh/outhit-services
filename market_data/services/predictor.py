@@ -46,6 +46,7 @@ somewhat worse than the validation figures.
 """
 
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -69,7 +70,8 @@ from market_data.services import learning, market_data, ranking
 log = logging.getLogger(__name__)
 
 HORIZONS = {1: "next trading day", 21: "1 month", 63: "3 months"}
-UNIVERSE = 300
+# Most-traded stocks each model learns from. Memory grows with it: lower it on small servers.
+UNIVERSE = int(os.environ.get("MARKET_DATA_PREDICT_UNIVERSE", "300"))
 MIN_STOCKS = 40
 STEP = 5  # sample one row per stock per week to limit overlapping labels (daily for the next-day model)
 FOLDS = 8
@@ -679,9 +681,16 @@ def _run(key: tuple[str, int]) -> None:
     job.finished = time.time()
 
 
+# Training needs ~300 MB on top of the service itself; small hosts turn it off.
+TRAINING_ENABLED = os.environ.get("MARKET_DATA_ENABLE_TRAINING", "true").lower() not in ("0", "false", "no")
+
+
 def get(code: str, horizon: int) -> dict:
     """Return the cached prediction, or start training and report progress."""
     key = (code, horizon)
+    if not TRAINING_ENABLED and key not in _jobs:
+        return {"status": "error", "message": "Predictions aren't available on this server: training the model needs "
+                "more memory than it has. Run Outhit locally to see them."}
     with _jobs_lock:
         job = _jobs.get(key)
         stale = job is not None and job.finished is not None and (

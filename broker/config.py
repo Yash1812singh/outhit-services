@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     intelligence_url: str = "http://127.0.0.1:8202"
     # Must equal the Redirect URL configured in your Upstox app.
     redirect_uri: str = "http://localhost:3050/trade/broker/callback"
+    # False on public deployments: only test mode (Upstox sandbox) is offered, so no real money can move.
+    allow_live: bool = True
     upstox_web_url: str = "https://pro.upstox.com/"
     upstox_funds_help_url: str = "https://upstox.com/help-center/250454/"
     # Per-user limits (INR): defaults, and the highest a user may set them.

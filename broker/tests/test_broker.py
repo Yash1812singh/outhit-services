@@ -208,3 +208,12 @@ def test_disconnect_wipes_credentials():
 
 def test_instrument_search():
     assert client.get("/api/broker/instruments?q=tc", headers=user()).json()[0]["symbol"] == "TCS.NS"
+
+
+def test_live_trading_can_be_turned_off_for_a_public_server(monkeypatch):
+    from broker import main
+    uid = 9101
+    monkeypatch.setattr(main.settings, "allow_live", False)
+    r = client.post("/api/broker/connect/live/start", json={"api_key": "k-123456", "api_secret": "s-123456"}, headers=user(uid))  # gitleaks:allow (fake)
+    assert r.status_code == 403 and "sandbox" in r.json()["detail"]
+    assert client.get("/api/broker/status", headers=user(uid)).json()["live_allowed"] is False

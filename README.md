@@ -87,6 +87,26 @@ docker compose up --build       # gateway on http://localhost:8001
 One `Dockerfile` builds every service (`--build-arg SERVICE=...`). Each service has its own `requirements.txt`
 and a named volume for its data.
 
+## One process (small hosts)
+
+`combined.py` runs all seven services in one process: the gateway at the root, the others under
+`/_svc/<name>` (only reachable with `INTERNAL_TOKEN`), each still with its own database in `OUTHIT_DATA_DIR`.
+
+```bash
+set -a; source .env; set +a
+OUTHIT_DATA_DIR=./data .venv/bin/uvicorn combined:app --port 8001
+```
+
+It needs roughly 300 MB idle and 450 MB with the background jobs running; training predictions and the
+research jobs (picks, rockets, backtests) add 200–400 MB more. Settings for small or public servers:
+
+| Env var | Default | |
+|---|---|---|
+| `BROKER_ALLOW_LIVE` | `true` | `false`: test mode (Upstox sandbox) only, no real-money orders |
+| `MARKET_DATA_ENABLE_TRAINING` | `true` | `false`: the Predict page says predictions aren't available here |
+| `MARKET_DATA_PREDICT_UNIVERSE` | `300` | Stocks each prediction model learns from |
+| `OUTHIT_BACKUP_REPO` + `HF_TOKEN` | unset | Back up the databases to a private Hugging Face dataset (for hosts that wipe the disk) |
+
 ## Tests
 
 ```bash

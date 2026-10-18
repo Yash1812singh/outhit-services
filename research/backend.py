@@ -6,6 +6,7 @@ import time
 import httpx
 
 from research.config import get_settings
+from outhit_common.internal import internal_token
 
 log = logging.getLogger(__name__)
 _cache: dict[str, tuple[float, object]] = {}
@@ -16,7 +17,8 @@ def _get(path: str, ttl: int, timeout: float = 60) -> dict | list | None:
     if hit and time.time() - hit[0] < ttl:
         return hit[1]
     try:
-        r = httpx.get(get_settings().market_data_url + path, timeout=timeout)
+        r = httpx.get(get_settings().market_data_url + path, timeout=timeout,
+                      headers={"X-Internal-Token": internal_token()})
         r.raise_for_status()
         data = r.json()
     except Exception as exc:
