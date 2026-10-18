@@ -1,0 +1,9 @@
+# Everything combined.py needs: every service's requirements, plus the database backup client.
+-r gateway/requirements.txt
+-r market_data/requirements.txt
+-r intelligence/requirements.txt
+-r research/requirements.txt
+-r advisor/requirements.txt
+-r paper/requirements.txt
+-r broker/requirements.txt
+huggingface_hub==2.2.0

@@ -1,0 +1,22 @@
+# All seven services in one container (combined.py), for hosts that give you one small server,
+# e.g. Render's free plan. The per-service Dockerfile + docker-compose.yml remain the full setup.
+FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1 PYTHONPATH=/app PORT=8001 OUTHIT_DATA_DIR=/data HF_HOME=/tmp/hf \
+    # one malloc arena per thread makes a long-running Python process creep up in memory
+    MALLOC_ARENA_MAX=2
+WORKDIR /app
+COPY gateway/requirements.txt gateway/
+COPY market_data/requirements.txt market_data/
+COPY intelligence/requirements.txt intelligence/
+COPY research/requirements.txt research/
+COPY advisor/requirements.txt advisor/
+COPY paper/requirements.txt paper/
+COPY broker/requirements.txt broker/
+COPY requirements-hosted.txt .
+RUN pip install --no-cache-dir -r requirements-hosted.txt
+COPY . .
+RUN mkdir -p /data && chmod 777 /data
+EXPOSE 8001
+# Trust forwarded client IPs only from the host's internal proxy network (Render: 10.0.0.0/8),
+# so the gateway's rate limits see real visitors and a visitor can't fake their address.
+CMD ["sh", "-c", "exec uvicorn combined:app --host 0.0.0.0 --port ${PORT} --forwarded-allow-ips ${FORWARDED_ALLOW_IPS:-10.0.0.0/8} --timeout-graceful-shutdown 10"]

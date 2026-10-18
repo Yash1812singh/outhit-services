@@ -5,3 +5,6 @@
 **/*.db-*
 research/data/cache
 logs
+**/data/*.csv
+**/.pytest_cache
+data

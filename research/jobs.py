@@ -7,6 +7,7 @@ results survive restarts.
 
 import hashlib
 import logging
+import os
 import pickle
 import threading
 import time
@@ -30,6 +31,10 @@ class Job:
 _jobs: dict[str, Job] = {}
 _lock = threading.Lock()
 
+# Job-name prefixes to switch off, e.g. "tournament,rockets,trade:bt" on a server without the
+# memory for them (each loads hundreds of companies' price histories).
+DISABLED = tuple(p.strip() for p in os.environ.get("RESEARCH_DISABLED_JOBS", "").split(",") if p.strip())
+
 
 def _path(key: str) -> Path:
     return CACHE_DIR / f"job-{hashlib.md5(key.encode()).hexdigest()}.pkl"
@@ -47,6 +52,9 @@ def _load(key: str, ttl: int):
 
 def run(key: str, fn, ttl: int) -> dict:
     """Return the cached result for `key`, or start `fn(progress)` in the background."""
+    if DISABLED and key.startswith(DISABLED):
+        return {"status": "error", "message": "This analysis isn't available on this server: it needs more memory "
+                "than it has. Run Outhit locally to see it."}
     result = _load(key, ttl)
     if result is not None:
         return result
