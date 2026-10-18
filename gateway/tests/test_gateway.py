@@ -59,6 +59,99 @@ def test_passwords_are_hashed():
     assert u.password_hash != "Str0ng!pass" and auth.verify_password("Str0ng!pass", u.password_hash)
 
 
+def _bearer(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_logout_revokes_only_that_token():
+    _register("out@example.com")
+    login = lambda: client.post("/api/auth/login", json={"email": "out@example.com", "password": "Str0ng!pass"}).json()["access_token"]
+    first, second = login(), login()
+    assert client.post("/api/auth/logout", headers=_bearer(first)).status_code == 204
+    assert client.get("/api/auth/me", headers=_bearer(first)).status_code == 401
+    assert client.get("/api/auth/me", headers=_bearer(second)).status_code == 200  # other sessions stay signed in
+    assert client.post("/api/auth/logout").status_code == 204  # logging out without a token is harmless
+
+
+def test_revoked_token_is_forwarded_as_anonymous(upstream):
+    token = _token("revoked@example.com")
+    client.post("/api/auth/logout", headers=_bearer(token))
+    client.get("/api/paper/portfolios", headers=_bearer(token))
+    assert "x-user-id" not in upstream[-1].headers
+
+
+@pytest.fixture
+def google(monkeypatch):
+    """Enable Google sign-in and stand in for Google's signature check."""
+    monkeypatch.setattr(auth.settings, "google_client_id", "test-client.apps.googleusercontent.com")
+    tokens: dict[str, dict] = {}
+
+    def verify(credential: str) -> dict:
+        if credential not in tokens:
+            raise auth.jwt.InvalidSignatureError("bad signature")
+        return tokens[credential]
+
+    monkeypatch.setattr(auth, "verify_google_token", verify)
+    return tokens
+
+
+def test_google_config_reports_client_id(google):
+    assert client.get("/api/auth/config").json() == {"google_client_id": "test-client.apps.googleusercontent.com"}
+
+
+def test_google_disabled_without_client_id(monkeypatch):
+    monkeypatch.setattr(auth.settings, "google_client_id", "")
+    assert client.get("/api/auth/config").json() == {"google_client_id": None}
+    assert client.post("/api/auth/google", json={"credential": "x" * 40}).status_code == 503
+
+
+def test_google_sign_up_then_sign_in(google):
+    google["cred-new-user-0000000000"] = {"sub": "g-1", "email": "Gina@Gmail.com", "email_verified": True, "given_name": "Gina", "family_name": "Lee"}
+    r = client.post("/api/auth/google", json={"credential": "cred-new-user-0000000000"})
+    assert r.status_code == 200, r.text
+    user = r.json()["user"]
+    assert user["email"] == "gina@gmail.com" and user["first_name"] == "Gina"
+    assert user["google_linked"] and not user["has_password"]
+    again = client.post("/api/auth/google", json={"credential": "cred-new-user-0000000000"}).json()["user"]
+    assert again["id"] == user["id"]
+    # No password was set, so password login explains what to do instead.
+    pw = client.post("/api/auth/login", json={"email": "gina@gmail.com", "password": "whatever-123"})
+    assert pw.status_code == 401 and "Google" in pw.json()["detail"]
+
+
+def test_google_links_existing_password_account(google):
+    uid = _register("link@example.com").json()["user"]["id"]
+    google["cred-link-000000000000000"] = {"sub": "g-2", "email": "link@example.com", "email_verified": True}
+    r = client.post("/api/auth/google", json={"credential": "cred-link-000000000000000"})
+    assert r.json()["user"]["id"] == uid and r.json()["user"]["google_linked"] and r.json()["user"]["has_password"]
+    assert client.post("/api/auth/login", json={"email": "link@example.com", "password": "Str0ng!pass"}).status_code == 200
+
+
+def test_google_rejects_bad_or_unverified_tokens(google):
+    assert client.post("/api/auth/google", json={"credential": "forged-credential-00000000"}).status_code == 401
+    google["cred-unverified-000000000"] = {"sub": "g-3", "email": "u@example.com", "email_verified": False}
+    assert client.post("/api/auth/google", json={"credential": "cred-unverified-000000000"}).status_code == 401
+
+
+def test_verify_google_token_checks_audience_and_issuer(monkeypatch):
+    """The real verifier, with a locally generated key standing in for Google's."""
+    import time
+
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    monkeypatch.setattr(auth._google_keys, "get_signing_key_from_jwt", lambda _t: type("K", (), {"key": key.public_key()})())
+    monkeypatch.setattr(auth.settings, "google_client_id", "ours.apps.googleusercontent.com")
+    base = {"sub": "1", "email": "a@b.com", "exp": int(time.time()) + 60, "iss": "https://accounts.google.com", "aud": "ours.apps.googleusercontent.com"}
+    sign = lambda **kw: jwt.encode({**base, **kw}, key, algorithm="RS256")
+
+    assert auth.verify_google_token(sign())["sub"] == "1"
+    for bad in ({"aud": "someone-else"}, {"iss": "https://evil.example"}, {"exp": int(time.time()) - 600}):
+        with pytest.raises(jwt.PyJWTError):
+            auth.verify_google_token(sign(**bad))
+
+
 # ---------------- routing ----------------
 
 @pytest.mark.parametrize("path,service", [

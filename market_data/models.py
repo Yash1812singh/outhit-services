@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import JSON, DateTime, String
+from sqlalchemy import JSON, Date, DateTime, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from market_data.db import Base, _now
@@ -41,3 +41,28 @@ class FundamentalsCache(Base):
     symbol: Mapped[str] = mapped_column(String(32), primary_key=True)
     data: Mapped[dict] = mapped_column(JSON)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PredictionRecord(Base):
+    """One published ML prediction, kept so it can be checked against what really happened.
+
+    `variants` holds every candidate model's probability, so the learning loop can
+    compare them on live outcomes and not just on the backtest."""
+
+    __tablename__ = "prediction_records"
+    __table_args__ = (UniqueConstraint("market", "horizon", "as_of", "symbol", name="uq_prediction"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    market: Mapped[str] = mapped_column(String(8), index=True)
+    horizon: Mapped[int] = mapped_column(index=True)
+    as_of: Mapped[date] = mapped_column(Date, index=True)
+    symbol: Mapped[str] = mapped_column(String(32))
+    prob: Mapped[float]
+    decile: Mapped[int]
+    variant: Mapped[str] = mapped_column(String(32))
+    variants: Mapped[dict] = mapped_column(JSON, default=dict)
+    price: Mapped[float]
+    fwd_ret: Mapped[float | None] = mapped_column(default=None)
+    outperform: Mapped[bool | None] = mapped_column(default=None)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -128,15 +128,30 @@ async def refresh(market: str, _: int = Depends(require_user)) -> dict:
     return {"market": code, "companies": n}
 
 
+def _predict_market(code: str) -> str:
+    from market_data.services import predictor
+
+    return predictor.ASSETS_CODE if code.lower() == predictor.ASSETS_CODE else _market(code)
+
+
 @router.get("/predict/{market}")
 async def predict(market: str, horizon: int = 21) -> dict:
-    """ML forecast of which stocks will beat the market over the next 1 or 3 months.
-    The first call starts training (~30 s) and returns status "training"; poll until "ready"."""
+    """ML forecast of which stocks (or, for market "assets", which ETFs, bonds, commodities and coins)
+    will beat the rest over the next trading day, 1 month or 3 months.
+    The first call starts training and returns status "training"; poll until "ready"."""
     from market_data.services import predictor
 
     if horizon not in predictor.HORIZONS:
-        raise HTTPException(422, "horizon must be 21 (1 month) or 63 (3 months)")
-    return native(await run_in_threadpool(predictor.get, _market(market), horizon))
+        raise HTTPException(422, "horizon must be 1 (next trading day), 21 (1 month) or 63 (3 months)")
+    return native(await run_in_threadpool(predictor.get, _predict_market(market), horizon))
+
+
+@router.get("/predict/{market}/track-record")
+async def predict_track_record(market: str, horizon: int = 21) -> dict:
+    """How the published predictions have done once their outcomes were known."""
+    from market_data.services import learning
+
+    return native(await run_in_threadpool(learning.track_record, _predict_market(market), horizon))
 
 
 @router.get("/stocks/quality/{symbol}")

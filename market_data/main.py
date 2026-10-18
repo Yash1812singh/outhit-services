@@ -10,7 +10,7 @@ from market_data.config import get_settings
 from market_data.db import Base, engine
 from market_data import models  # noqa: F401  (register tables)
 from market_data.routers import crypto, market, stocks
-from market_data.services import screener
+from market_data.services import predictor, screener
 from outhit_common.web import CleanJSONResponse
 
 logging.basicConfig(level=logging.INFO)
@@ -23,8 +23,10 @@ Base.metadata.create_all(bind=engine)
 async def lifespan(_: FastAPI):
     if settings.enable_refresher:
         screener.start_refresher()
+        predictor.start_learning_loop()
     yield
     screener.stop_refresher()
+    predictor.stop_learning_loop()
 
 
 app = FastAPI(title="Outhit market-data", version="2.0.0", lifespan=lifespan, default_response_class=CleanJSONResponse)

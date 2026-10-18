@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-insecure-secret-set-GATEWAY_JWT_SECRET"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7
+    # OAuth 2.0 Web client ID from Google Cloud Console; empty disables Google sign-in.
+    google_client_id: str = ""
     cors_origins: str = "http://localhost:3000,http://localhost:3050"
 
     market_data_url: str = "http://127.0.0.1:8201"

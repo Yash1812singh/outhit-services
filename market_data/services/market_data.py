@@ -1,6 +1,6 @@
 """Price history from Yahoo Finance, with an in-process TTL cache.
 
-Everything downstream works on daily closes, so one batch download per cache
+Most of the code works on daily closes (the predictor also uses open/high/low), so one batch download per cache
 window serves every endpoint.
 """
 
@@ -48,7 +48,7 @@ def _download(symbols: list[str]) -> dict[str, pd.DataFrame]:
             frame = raw[sym] if isinstance(raw.columns, pd.MultiIndex) else raw
         except KeyError:
             continue
-        frame = frame[["Close", "Volume"]].dropna(subset=["Close"])
+        frame = frame[[c for c in ("Open", "High", "Low", "Close", "Volume") if c in frame.columns]].dropna(subset=["Close"])
         if len(frame) >= 30:
             frame.index = pd.DatetimeIndex(frame.index).tz_localize(None)
             out[sym] = frame
@@ -56,7 +56,7 @@ def _download(symbols: list[str]) -> dict[str, pd.DataFrame]:
 
 
 def get_history(symbols: list[str]) -> dict[str, pd.DataFrame]:
-    """Daily Close/Volume frames keyed by symbol. Symbols with no data are omitted."""
+    """Daily Open/High/Low/Close/Volume frames keyed by symbol. Symbols with no data are omitted."""
     symbols = list(dict.fromkeys(s.upper() for s in symbols))
     with _lock:
         result = {s: df for s in symbols if (df := _fresh(s)) is not None}

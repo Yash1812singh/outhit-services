@@ -28,9 +28,11 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("gateway")
 settings = get_settings()
 Path("data").mkdir(exist_ok=True)
-auth.Base.metadata.create_all(bind=auth.engine)
+auth.init_db()
 if settings.jwt_secret.startswith("dev-only"):
     log.warning("GATEWAY_JWT_SECRET is not set; using an insecure development secret.")
+if not settings.google_client_id:
+    log.info("GATEWAY_GOOGLE_CLIENT_ID is not set; \"Sign in with Google\" is disabled.")
 
 SERVICES = {
     "market-data": settings.market_data_url,
@@ -92,7 +94,7 @@ def _limited(key: str, limit: int) -> bool:
 async def rate_limit(request: Request, call_next):
     path = request.url.path
     who = request.client.host if request.client else "?"
-    if path.startswith("/api/auth/login") or path.startswith("/api/auth/register"):
+    if path.startswith(("/api/auth/login", "/api/auth/register", "/api/auth/google")):
         cls, limit = "auth", settings.rate_limit_auth
     elif path.startswith("/api/advisor/chat"):
         cls, limit = "chat", settings.rate_limit_chat
