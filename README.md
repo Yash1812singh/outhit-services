@@ -90,7 +90,7 @@ and a named volume for its data.
 ## One process (small hosts)
 
 `combined.py` runs all seven services in one process: the gateway at the root, the others under
-`/_svc/<name>` (only reachable with `INTERNAL_TOKEN`), each still with its own database in `OUTHIT_DATA_DIR`.
+`/_svc/<name>` (only reachable with `INTERNAL_TOKEN`), each still with its own database in `OUTHIT_DATA_DIR`. Point the host's health check at `/healthz`.
 
 ```bash
 set -a; source .env; set +a

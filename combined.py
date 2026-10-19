@@ -64,7 +64,7 @@ from outhit_common.internal import internal_token  # noqa: E402
 
 from starlette.applications import Starlette  # noqa: E402
 from starlette.responses import PlainTextResponse  # noqa: E402
-from starlette.routing import Mount  # noqa: E402
+from starlette.routing import Mount, Route  # noqa: E402
 
 log = logging.getLogger("outhit.combined")
 gateway = import_module("gateway.main").app
@@ -85,8 +85,15 @@ async def lifespan(_app):
         await saver
 
 
+async def healthz(_request):
+    """For the host's health check: answers instantly. /api/health asks every service in turn,
+    which can take seconds on a busy, small CPU and get a healthy server restarted."""
+    return PlainTextResponse("ok")
+
+
 app = Starlette(
-    routes=[*(Mount(f"/_svc/{name}", app=sub) for name, sub in services.items()), Mount("/", app=gateway)],
+    routes=[Route("/healthz", healthz),
+            *(Mount(f"/_svc/{name}", app=sub) for name, sub in services.items()), Mount("/", app=gateway)],
     lifespan=lifespan,
 )
 
