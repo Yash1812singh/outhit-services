@@ -2,6 +2,7 @@
 LLM headline scoring every 3 minutes, ledger scoring hourly, universe refresh every 6 hours."""
 
 import logging
+import os
 import threading
 import time
 from datetime import timedelta
@@ -17,7 +18,16 @@ _stop = threading.Event()
 NEWS_BATCH = 50  # ~2 s per company; keeps ~170 tracked companies refreshed about every 40 minutes
 
 
+# Loops to skip, e.g. "news,outlooks,llm-news,ledger,bootstrap" on a small server that sleeps
+# when idle: each wake-up would otherwise start a full sweep of every tracked company.
+DISABLED = {n.strip() for n in os.environ.get("INTELLIGENCE_DISABLED_LOOPS", "").split(",") if n.strip()}
+
+
 def _every(seconds: int, fn, name: str, initial_delay: float = 0) -> None:
+    if name in DISABLED:
+        log.info("background loop %r is switched off (INTELLIGENCE_DISABLED_LOOPS)", name)
+        return
+
     def loop():
         if _stop.wait(initial_delay):
             return

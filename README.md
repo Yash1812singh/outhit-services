@@ -105,6 +105,8 @@ research jobs (picks, rockets, backtests) add 200–400 MB more. Settings for sm
 | `BROKER_ALLOW_LIVE` | `true` | `false`: test mode (Upstox sandbox) only, no real-money orders |
 | `MARKET_DATA_ENABLE_TRAINING` | `true` | `false`: the Predict page says predictions aren't available here |
 | `MARKET_DATA_PREDICT_UNIVERSE` | `300` | Stocks each prediction model learns from |
+| `INTELLIGENCE_DISABLED_LOOPS` | empty | Background loops to skip, e.g. `news,outlooks,llm-news,ledger,bootstrap` (each sweeps every tracked company) |
+| `RESEARCH_DISABLED_JOBS` | empty | Research jobs to switch off by name prefix, e.g. `tournament,rockets,trade:bt,rec:,intraday` |
 | `OUTHIT_BACKUP_REPO` + `HF_TOKEN` | unset | Back up the databases to a private Hugging Face dataset (for hosts that wipe the disk) |
 
 ## Tests
